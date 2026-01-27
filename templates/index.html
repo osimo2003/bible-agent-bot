@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bible Agent - Your Daily Scripture Companion</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>📖 Bible Agent</h1>
+                <p>Your Daily Scripture Companion</p>
+            </div>
+            <div class="header-actions">
+                 <button id="darkModeBtn" class="btn-secondary">🌙 Dark</button>
+                 <button id="progressBtn" class="btn-secondary">📊 Progress</button>
+                 <button id="bookmarksBtn" class="btn-secondary">🔖 Bookmarks</button>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <div id="chatMessages" class="chat-messages">
+                <!-- Welcome message -->
+                <div class="message bot-message">
+                    <div class="message-content">
+                        <p>Hello! 🙏 I'm your Bible Agent, here to help you grow in God's Word.</p>
+                        <p><strong>I can help you with:</strong></p>
+                        <ul>
+                            <li>📖 Daily Bible reading (2 chapters from NT)</li>
+                            <li>💭 Finding verses for life challenges</li>
+                            <li>🔖 Saving favorite verses</li>
+                            <li>📊 Tracking your progress</li>
+                        </ul>
+                        <p><strong>Try saying:</strong></p>
+                        <div class="quick-replies">
+                            <button class="quick-reply">Today's reading</button>
+                            <button class="quick-reply">I'm feeling anxious</button>
+                            <button class="quick-reply">Show my progress</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compact Search Bar -->
+            <div class="search-container">
+                <button id="searchToggleBtn" class="btn-search-toggle">🔍</button>
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-input-collapsed"
+                    placeholder="Search Bible..."
+                    autocomplete="off"
+                >
+            </div>
+            <!-- Input Area -->
+            <div class="chat-input-container">
+                <div class="chat-input">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Type your message or question..."
+                        autocomplete="off"
+                    >
+                    <button id="sendBtn" class="btn-primary">
+                        <span>Send</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Modal for Progress -->
+        <div id="progressModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>📊 Your Reading Progress</h2>
+                <div id="progressContent"></div>
+            </div>
+        </div>
+
+        <!-- Modal for Bookmarks -->
+        <div id="bookmarksModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>🔖 Your Bookmarks</h2>
+                <div id="bookmarksContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
