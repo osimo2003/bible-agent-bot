@@ -153,4 +153,4 @@ This project is open source and available under the MIT License.
 
 ---
 
-**Built with Love to help people grow in God's Word**
+**Built with ❤️ to help people grow in God's Word**
