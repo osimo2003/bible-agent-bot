@@ -16,3 +16,6 @@ __pycache__/
    *.swo
 .DS_Store
    Thumbs.db
+
+# Exception for Bible database
+!database/bible.db
