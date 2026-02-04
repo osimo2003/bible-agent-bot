@@ -1,4 +1,5 @@
 import sqlite3
+import re
 from pathlib import Path
 
 class FullBibleDatabase:
@@ -47,6 +48,7 @@ class FullBibleDatabase:
     def search_text(self, query, max_results=10):
         """
         Search for any word or phrase in the Bible
+        Handles special formatting like {are}, {is}, etc.
         Returns list of matching verses
         """
         if not self.conn:
@@ -54,34 +56,96 @@ class FullBibleDatabase:
         
         try:
             cursor = self.conn.cursor()
+            query_lower = query.lower().strip()
             
+            # Strategy 1: Try exact phrase first (with flexible braces)
+            # Convert "blessed are the meek" to "blessed%are%the%meek" pattern
+            words = query_lower.split()
+            if len(words) > 1:
+                # Create pattern that allows {word} formatting
+                flexible_pattern = '%'.join(words)
+                
+                sql = """
+                    SELECT v.id, v.book_id, v.chapter, v.verse, v.text
+                    FROM verses v
+                    WHERE LOWER(v.text) LIKE ? 
+                    ORDER BY v.id 
+                    LIMIT ?
+                """
+                
+                cursor.execute(sql, (f'%{flexible_pattern}%', max_results))
+                results = cursor.fetchall()
+                
+                if results:
+                    return self._format_results(results)
+            
+            # Strategy 2: Try direct search
             sql = """
                 SELECT v.id, v.book_id, v.chapter, v.verse, v.text
                 FROM verses v
-                WHERE v.text LIKE ? 
+                WHERE LOWER(v.text) LIKE ? 
                 ORDER BY v.id 
                 LIMIT ?
             """
             
-            cursor.execute(sql, (f'%{query}%', max_results))
+            cursor.execute(sql, (f'%{query_lower}%', max_results))
             results = cursor.fetchall()
             
-            verses = []
-            for row in results:
-                book_name = self.book_cache.get(row['book_id'], {}).get('name', 'Unknown')
-                verses.append({
-                    'book': book_name,
-                    'chapter': row['chapter'],
-                    'verse': row['verse'],
-                    'text': row['text'],
-                    'reference': f"{book_name} {row['chapter']}:{row['verse']}"
-                })
+            if results:
+                return self._format_results(results)
             
-            return verses
+            # Strategy 3: Search for text without braces content
+            # Remove {word} patterns from search
+            clean_query = re.sub(r'\{[^}]*\}', '', query_lower).strip()
+            if clean_query != query_lower:
+                cursor.execute(sql, (f'%{clean_query}%', max_results))
+                results = cursor.fetchall()
+                
+                if results:
+                    return self._format_results(results)
+            
+            # Strategy 4: Multi-word search - find verses containing ALL words
+            if len(words) > 1:
+                # Build query for all words
+                conditions = ' AND '.join([f"LOWER(v.text) LIKE '%{word}%'" for word in words])
+                sql = f"""
+                    SELECT v.id, v.book_id, v.chapter, v.verse, v.text
+                    FROM verses v
+                    WHERE {conditions}
+                    ORDER BY v.id 
+                    LIMIT ?
+                """
+                
+                cursor.execute(sql, (max_results,))
+                results = cursor.fetchall()
+                
+                if results:
+                    return self._format_results(results)
+            
+            return []
             
         except Exception as e:
             print(f"Search error: {e}")
             return []
+    
+    def _format_results(self, results):
+        """Format database results into verse dictionaries"""
+        verses = []
+        for row in results:
+            book_name = self.book_cache.get(row['book_id'], {}).get('name', 'Unknown')
+            
+            # Clean up text - remove {} but keep the word inside
+            text = re.sub(r'\{([^}]*)\}', r'\1', row['text'])
+            
+            verses.append({
+                'book': book_name,
+                'chapter': row['chapter'],
+                'verse': row['verse'],
+                'text': text,
+                'reference': f"{book_name} {row['chapter']}:{row['verse']}"
+            })
+        
+        return verses
     
     def search_book(self, book_name, query=None, max_results=10):
         """Search within a specific book"""
@@ -105,11 +169,11 @@ class FullBibleDatabase:
                 sql = """
                     SELECT v.id, v.book_id, v.chapter, v.verse, v.text
                     FROM verses v
-                    WHERE v.book_id = ? AND v.text LIKE ?
+                    WHERE v.book_id = ? AND LOWER(v.text) LIKE ?
                     ORDER BY v.chapter, v.verse
                     LIMIT ?
                 """
-                cursor.execute(sql, (book_id, f'%{query}%', max_results))
+                cursor.execute(sql, (book_id, f'%{query.lower()}%', max_results))
             else:
                 sql = """
                     SELECT v.id, v.book_id, v.chapter, v.verse, v.text
@@ -121,19 +185,7 @@ class FullBibleDatabase:
                 cursor.execute(sql, (book_id, max_results))
             
             results = cursor.fetchall()
-            
-            verses = []
-            for row in results:
-                book_name_full = self.book_cache.get(row['book_id'], {}).get('name', book_name)
-                verses.append({
-                    'book': book_name_full,
-                    'chapter': row['chapter'],
-                    'verse': row['verse'],
-                    'text': row['text'],
-                    'reference': f"{book_name_full} {row['chapter']}:{row['verse']}"
-                })
-            
-            return verses
+            return self._format_results(results)
             
         except Exception as e:
             print(f"Book search error: {e}")
@@ -167,11 +219,13 @@ class FullBibleDatabase:
             
             if row:
                 book_name = self.book_cache.get(row['book_id'], {}).get('name', book)
+                text = re.sub(r'\{([^}]*)\}', r'\1', row['text'])
+                
                 return {
                     'book': book_name,
                     'chapter': row['chapter'],
                     'verse': row['verse'],
-                    'text': row['text'],
+                    'text': text,
                     'reference': f"{book_name} {row['chapter']}:{row['verse']}"
                 }
             
@@ -208,18 +262,7 @@ class FullBibleDatabase:
             cursor.execute(sql, (book_id, chapter))
             results = cursor.fetchall()
             
-            verses = []
-            book_name = self.book_cache.get(book_id, {}).get('name', book)
-            for row in results:
-                verses.append({
-                    'book': book_name,
-                    'chapter': row['chapter'],
-                    'verse': row['verse'],
-                    'text': row['text'],
-                    'reference': f"{book_name} {row['chapter']}:{row['verse']}"
-                })
-            
-            return verses
+            return self._format_results(results)
             
         except Exception as e:
             print(f"Get chapter error: {e}")
