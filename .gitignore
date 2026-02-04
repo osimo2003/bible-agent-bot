@@ -17,5 +17,7 @@ __pycache__/
 .DS_Store
    Thumbs.db
 
-# Exception for Bible database
+# Exception for Bible databases
 !database/bible.db
+!database/bible_agent.db
+!database/bible_verses.db

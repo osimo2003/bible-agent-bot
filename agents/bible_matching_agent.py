@@ -1,4 +1,5 @@
 from database.bible_data import BibleAPI, LocalBibleDB
+from database.full_bible_db import FullBibleDatabase
 
 class BibleMatchingAgent:
     """
@@ -11,6 +12,7 @@ class BibleMatchingAgent:
     def __init__(self):
         self.api = BibleAPI()
         self.local_db = LocalBibleDB()
+        self.full_bible = FullBibleDatabase()
         
         # Comprehensive keyword to Scripture mapping
         self.keyword_map = {
@@ -76,12 +78,29 @@ class BibleMatchingAgent:
     def fetch_chapters(self, book, start_chapter, count=2):
         """
         Fetch multiple chapters for daily reading
-        Returns list of chapter data
+        Now uses full Bible database for faster retrieval
         """
         chapters = []
         
         for i in range(count):
             chapter_num = start_chapter + i
+            
+            # Try full Bible database first
+            if self.full_bible and self.full_bible.conn:
+                verses = self.full_bible.get_chapter(book, chapter_num)
+                if verses:
+                    # Combine all verse texts
+                    text = ' '.join([v['text'] for v in verses])
+                    chapters.append({
+                        'book': book,
+                        'chapter': chapter_num,
+                        'text': text,
+                        'reference': f"{book} {chapter_num}",
+                        'verses': verses
+                    })
+                    continue
+            
+            # Fallback to API
             chapter_data = self.api.get_chapter(book, chapter_num)
             
             if chapter_data:
@@ -93,7 +112,7 @@ class BibleMatchingAgent:
                     'verses': chapter_data.get('verses', [])
                 })
             else:
-                # Try local DB as fallback
+                # Try local DB as last resort
                 local_verses = self.local_db.get_chapter(book, chapter_num)
                 if local_verses:
                     text = ' '.join([v['text'] for v in local_verses])
@@ -106,6 +125,7 @@ class BibleMatchingAgent:
                     })
         
         return chapters
+                   
     
     def find_relevant_verses(self, emotions, message=None):
         """
@@ -141,30 +161,47 @@ class BibleMatchingAgent:
         return matched_verses[:3]
     
     def search_verses(self, topic):
-        """Enhanced search with comprehensive keyword matching"""
+        """
+        Enhanced search with full Bible database
+        Priority: Full Bible DB > Keyword Map > API > Local DB
+        """
         topic_lower = topic.lower()
         verses = []
         
-        # Direct keyword match
+        # First, try full Bible database (TRUE full-text search!)
+        if self.full_bible and self.full_bible.conn:
+            results = self.full_bible.search_text(topic, max_results=5)
+            if results:
+                # Format to match expected structure
+                for result in results:
+                    verses.append({
+                        'reference': result['reference'],
+                        'text': result['text'],
+                        'translation': 'KJV'
+                    })
+                return verses
+        
+        # Fallback to keyword map for common searches
         if topic_lower in self.keyword_map:
             verse_refs = self.keyword_map[topic_lower]
             for ref in verse_refs[:5]:
                 verse_data = self.api.get_verse(ref)
                 if verse_data:
                     verses.append(verse_data)
+            if verses:
+                return verses
         
         # Partial keyword match
-        if not verses:
-            for keyword, verse_refs in self.keyword_map.items():
-                if topic_lower in keyword or keyword in topic_lower:
-                    for ref in verse_refs[:3]:
-                        verse_data = self.api.get_verse(ref)
-                        if verse_data:
-                            verses.append(verse_data)
-                    if verses:
-                        break
+        for keyword, verse_refs in self.keyword_map.items():
+            if topic_lower in keyword or keyword in topic_lower:
+                for ref in verse_refs[:3]:
+                    verse_data = self.api.get_verse(ref)
+                    if verse_data:
+                        verses.append(verse_data)
+                if verses:
+                    return verses
         
-        # Fallback to old API search
+        # Fallback to API
         if not verses:
             verses = self.api.search_verses(topic)
         
@@ -173,6 +210,8 @@ class BibleMatchingAgent:
             verses = self.local_db.search_keyword(topic)
         
         return verses if verses else []
+        
+
     
     def get_verse(self, reference):
         """Get a specific verse by reference"""
