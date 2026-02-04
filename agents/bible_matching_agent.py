@@ -300,3 +300,71 @@ class BibleMatchingAgent:
         # Simple random selection
         import random
         return random.choice(book_questions)
+
+    def get_verse_by_reference(self, reference):
+        """
+        Get verse(s) by reference like 'John 3:16' or 'Psalm 23'
+        Handles single verses, verse ranges, and full chapters
+        """
+        import re
+        
+        reference = reference.strip()
+        
+        # Parse the reference
+        pattern = r'^([1-3]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
+        match = re.match(pattern, reference, re.IGNORECASE)
+        
+        if not match:
+            return None
+        
+        book = match.group(1).strip()
+        chapter = int(match.group(2))
+        verse_start = int(match.group(3)) if match.group(3) else None
+        verse_end = int(match.group(4)) if match.group(4) else None
+        
+        # If no verse specified, get the whole chapter
+        if verse_start is None:
+            verses = self.full_bible.get_chapter(book, chapter)
+            if verses:
+                return {
+                    'reference': f"{book} {chapter}",
+                    'book': book,
+                    'chapter': chapter,
+                    'verses': verses[:20],
+                    'text': '\n'.join([f"{v['verse']}. {v['text']}" for v in verses[:20]]),
+                    'is_chapter': True
+                }
+            return None
+        
+        # Single verse
+        if verse_end is None:
+            verse_data = self.full_bible.get_verse(book, chapter, verse_start)
+            if verse_data:
+                return {
+                    'reference': f"{book} {chapter}:{verse_start}",
+                    'book': book,
+                    'chapter': chapter,
+                    'verse': verse_start,
+                    'text': verse_data['text'],
+                    'is_chapter': False
+                }
+            return None
+        
+        # Verse range
+        verses = []
+        for v in range(verse_start, verse_end + 1):
+            verse_data = self.full_bible.get_verse(book, chapter, v)
+            if verse_data:
+                verses.append(verse_data)
+        
+        if verses:
+            return {
+                'reference': f"{book} {chapter}:{verse_start}-{verse_end}",
+                'book': book,
+                'chapter': chapter,
+                'verses': verses,
+                'text': '\n'.join([f"{v['verse']}. {v['text']}" for v in verses]),
+                'is_chapter': False
+            }
+        
+        return None

@@ -237,3 +237,17 @@ class ResponseComposer:
             message += f"\n_...and {len(bookmarks) - 10} more_"
         
         return message
+
+    def present_verse(self, verse_data):
+        """Present a specific verse or chapter to the user"""
+        if not verse_data:
+            return "I couldn't find that verse. Please check the reference and try again (e.g., 'John 3:16' or 'Psalm 23')."
+        
+        reference = verse_data.get('reference', 'Unknown')
+        text = verse_data.get('text', '')
+        is_chapter = verse_data.get('is_chapter', False)
+        
+        if is_chapter:
+            return f"📖 **{reference}**\n\n{text}\n\n_Would you like me to continue to the next chapter?_"
+        else:
+            return f"📖 **{reference}**\n\n\"{text}\"\n\n_Would you like to bookmark this verse or explore related passages?_"

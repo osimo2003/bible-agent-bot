@@ -33,6 +33,24 @@ class PlannerAgent:
             'prophet', 'apostle', 'disciple', 'church', 'marriage', 'family',
             'children', 'money', 'wealth', 'poverty', 'work', 'rest', 'sabbath'
         ]
+        
+        # Bible book names for reference detection
+        self.bible_books = [
+            'genesis', 'exodus', 'leviticus', 'numbers', 'deuteronomy',
+            'joshua', 'judges', 'ruth', '1 samuel', '2 samuel',
+            '1 kings', '2 kings', '1 chronicles', '2 chronicles',
+            'ezra', 'nehemiah', 'esther', 'job', 'psalms', 'psalm',
+            'proverbs', 'ecclesiastes', 'song of solomon', 'isaiah',
+            'jeremiah', 'lamentations', 'ezekiel', 'daniel', 'hosea',
+            'joel', 'amos', 'obadiah', 'jonah', 'micah', 'nahum',
+            'habakkuk', 'zephaniah', 'haggai', 'zechariah', 'malachi',
+            'matthew', 'mark', 'luke', 'john', 'acts', 'romans',
+            '1 corinthians', '2 corinthians', 'galatians', 'ephesians',
+            'philippians', 'colossians', '1 thessalonians', '2 thessalonians',
+            '1 timothy', '2 timothy', 'titus', 'philemon', 'hebrews',
+            'james', '1 peter', '2 peter', '1 john', '2 john', '3 john',
+            'jude', 'revelation'
+        ]
     
     def analyze_intent(self, message):
         """
@@ -40,6 +58,11 @@ class PlannerAgent:
         Returns: intent type and extracted data
         """
         message_lower = message.lower().strip()
+        
+        # Check for verse reference FIRST (e.g., "John 3:16", "Psalm 23:1")
+        verse_ref = self._extract_verse_reference(message)
+        if verse_ref:
+            return {'type': 'get_verse', 'data': {'reference': verse_ref}}
         
         # Check for greetings (exact or start of message)
         for greeting in self.intents['greeting']:
@@ -92,6 +115,91 @@ class PlannerAgent:
         # Default to general conversation
         return {'type': 'general', 'data': {'message': message}}
     
+    def _extract_verse_reference(self, message):
+        """
+        Extract Bible verse reference from message
+        Handles: John 3:16, 1 Corinthians 13:4-7, Psalm 23, Romans 8:28
+        """
+        message_clean = message.strip()
+        
+        # Pattern for books with numbers (1 John, 2 Kings, etc.)
+        # Format: [1-3] BookName Chapter:Verse[-Verse]
+        pattern_numbered = r'^([1-3])\s*([A-Za-z]+)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
+        
+        # Pattern for regular books (John, Romans, etc.)
+        # Format: BookName Chapter:Verse[-Verse]
+        pattern_regular = r'^([A-Za-z]+)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
+        
+        # Pattern for "Song of Solomon" style
+        pattern_multi_word = r'^(song\s+of\s+solomon)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
+        
+        # Try numbered book pattern (1 John 3:16)
+        match = re.match(pattern_numbered, message_clean, re.IGNORECASE)
+        if match:
+            book_num = match.group(1)
+            book_name = match.group(2)
+            chapter = match.group(3)
+            verse_start = match.group(4)
+            verse_end = match.group(5)
+            
+            full_book = f"{book_num} {book_name}"
+            
+            # Verify it's a valid book
+            if self._is_valid_book(full_book):
+                ref = f"{full_book} {chapter}"
+                if verse_start:
+                    ref += f":{verse_start}"
+                    if verse_end:
+                        ref += f"-{verse_end}"
+                return ref
+        
+        # Try multi-word book pattern (Song of Solomon)
+        match = re.match(pattern_multi_word, message_clean, re.IGNORECASE)
+        if match:
+            book_name = match.group(1)
+            chapter = match.group(2)
+            verse_start = match.group(3)
+            verse_end = match.group(4)
+            
+            ref = f"{book_name} {chapter}"
+            if verse_start:
+                ref += f":{verse_start}"
+                if verse_end:
+                    ref += f"-{verse_end}"
+            return ref
+        
+        # Try regular book pattern (John 3:16)
+        match = re.match(pattern_regular, message_clean, re.IGNORECASE)
+        if match:
+            book_name = match.group(1)
+            chapter = match.group(2)
+            verse_start = match.group(3)
+            verse_end = match.group(4)
+            
+            # Verify it's a valid book
+            if self._is_valid_book(book_name):
+                ref = f"{book_name} {chapter}"
+                if verse_start:
+                    ref += f":{verse_start}"
+                    if verse_end:
+                        ref += f"-{verse_end}"
+                return ref
+        
+        return None
+    
+    def _is_valid_book(self, book_name):
+        """Check if the book name is a valid Bible book"""
+        book_lower = book_name.lower().strip()
+        
+        for book in self.bible_books:
+            if book_lower == book or book_lower == book.replace(' ', ''):
+                return True
+            # Handle abbreviations
+            if book.startswith(book_lower) and len(book_lower) >= 3:
+                return True
+        
+        return False
+    
     def _is_bible_topic(self, message):
         """Check if message is a common Bible topic"""
         message_clean = message.strip().lower()
@@ -120,20 +228,6 @@ class PlannerAgent:
                     return True
         
         return False
-    
-    def _extract_verse_reference(self, message):
-        """Extract Bible verse reference from message"""
-        # Pattern: Book Chapter:Verse or Book Chapter
-        pattern = r'([1-3]?\s?[A-Za-z]+)\s+(\d+):?(\d+)?'
-        match = re.search(pattern, message)
-        
-        if match:
-            book = match.group(1).strip()
-            chapter = match.group(2)
-            verse = match.group(3) if match.group(3) else None
-            return f"{book} {chapter}" + (f":{verse}" if verse else "")
-        
-        return None
     
     def _extract_topic(self, message):
         """Extract the topic/keyword from search messages"""
@@ -285,6 +379,20 @@ class PlannerAgent:
                 {
                     'agent': 'response_composer',
                     'action': 'present_search_results',
+                    'data': intent['data']
+                }
+            ]
+        
+        elif intent['type'] == 'get_verse':
+            plan['actions'] = [
+                {
+                    'agent': 'bible_matching',
+                    'action': 'get_specific_verse',
+                    'data': intent['data']
+                },
+                {
+                    'agent': 'response_composer',
+                    'action': 'present_verse',
                     'data': intent['data']
                 }
             ]
