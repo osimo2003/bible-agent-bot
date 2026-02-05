@@ -123,10 +123,6 @@ class AgentOrchestrator:
             reference = data.get('reference', '')
             return self.bible_matcher.get_verse_by_reference(reference)
 
-        elif action_type == 'get_specific_verse':
-            reference = data.get('reference', '')
-            return self.bible_matcher.get_verse_by_reference(reference)
-        
         return None
     
     def _execute_composer_action(self, action_type, data, previous_results):
