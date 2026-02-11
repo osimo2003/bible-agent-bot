@@ -1,22 +1,6 @@
+.env
 venv/
-   env/
-   ENV/
- .env
+*.db
 __pycache__/
-   *.py[cod]
-   *$py.class
-   *.so
-   .Python
- *.db
-   *.sqlite
-   *.sqlite3
- .vscode/
-   .idea/
-   *.swp
-   *.swo
-.DS_Store
-   Thumbs.db
-
-# Exception for Bible databases
 !database/bible.db
 !database/bible_verses.db
