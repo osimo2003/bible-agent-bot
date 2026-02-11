@@ -19,5 +19,4 @@ __pycache__/
 
 # Exception for Bible databases
 !database/bible.db
-!database/bible_agent.db
 !database/bible_verses.db
