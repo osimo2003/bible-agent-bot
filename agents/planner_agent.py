@@ -12,11 +12,13 @@ class PlannerAgent:
         self.intents = {
             'daily_reading': ['read today', 'daily reading', 'next chapter', 'continue reading', "today's reading"],
             'challenge': ['help me', 'i am struggling', 'feeling anxious', 'i am afraid', 'worried about', 'feeling sad', 'depressed', 'angry at', 'feeling lonely'],
-            'bookmark': ['save this', 'bookmark', 'remember this', 'mark this'],
+            'bookmark': ['save', 'bookmark', 'remember', 'mark'],
+            'bookmark_response': ['save ', 'bookmark '],
             'progress': ['my progress', 'how far', 'what chapter am i', 'where am i'],
             'search_triggers': ['find', 'search', 'verses about', 'verse about', 'show me', 'scripture about', 'what does the bible say about', 'bible says about', 'look for', 'look up'],
             'greeting': ['hello', 'hi', 'hey', 'good morning', 'good evening', 'good afternoon'],
-            'complete': ['done', 'finished', 'completed']
+            'complete': ['done', 'finished', 'completed'],
+            'bookmark_no': ['no thanks', 'no', 'skip', 'not now']
         }
         
         # Common Bible topics - single words that should trigger search
@@ -59,6 +61,17 @@ class PlannerAgent:
         """
         message_lower = message.lower().strip()
         
+        # Check for "No thanks" button click (bookmark decline)
+        if any(phrase in message_lower for phrase in self.intents['bookmark_no']):
+            return {'type': 'bookmark_no', 'data': None}
+        
+        # Check for "Save all" command from button click
+        if 'save all:' in message_lower:
+            parts = message.split('save all:', 1)
+            if len(parts) > 1:
+                refs = [r.strip() for r in parts[1].split(',')]
+                return {'type': 'bookmark_all', 'data': {'references': refs}}
+        
         # Check for verse reference FIRST (e.g., "John 3:16", "Psalm 23:1")
         verse_ref = self._extract_verse_reference(message)
         if verse_ref:
@@ -73,10 +86,11 @@ class PlannerAgent:
         if message_lower in ['done', 'finished', 'completed']:
             return {'type': 'complete', 'data': None}
         
-        # Check for bookmark request
-        if any(phrase in message_lower for phrase in self.intents['bookmark']):
+        # Check for bookmark request (from button click or manual command)
+        if any(word in message_lower for word in self.intents['bookmark_response']):
             verse_ref = self._extract_verse_reference(message)
-            return {'type': 'bookmark', 'data': {'reference': verse_ref}}
+            if verse_ref:
+                return {'type': 'bookmark', 'data': {'reference': verse_ref}}
         
         # Check for progress inquiry
         if any(phrase in message_lower for phrase in self.intents['progress']):
@@ -123,11 +137,9 @@ class PlannerAgent:
         message_clean = message.strip()
         
         # Pattern for books with numbers (1 John, 2 Kings, etc.)
-        # Format: [1-3] BookName Chapter:Verse[-Verse]
         pattern_numbered = r'^([1-3])\s*([A-Za-z]+)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
         
         # Pattern for regular books (John, Romans, etc.)
-        # Format: BookName Chapter:Verse[-Verse]
         pattern_regular = r'^([A-Za-z]+)\s+(\d+)(?::(\d+))?(?:-(\d+))?$'
         
         # Pattern for "Song of Solomon" style
@@ -144,7 +156,6 @@ class PlannerAgent:
             
             full_book = f"{book_num} {book_name}"
             
-            # Verify it's a valid book
             if self._is_valid_book(full_book):
                 ref = f"{full_book} {chapter}"
                 if verse_start:
@@ -176,7 +187,6 @@ class PlannerAgent:
             verse_start = match.group(3)
             verse_end = match.group(4)
             
-            # Verify it's a valid book
             if self._is_valid_book(book_name):
                 ref = f"{book_name} {chapter}"
                 if verse_start:
@@ -194,7 +204,6 @@ class PlannerAgent:
         for book in self.bible_books:
             if book_lower == book or book_lower == book.replace(' ', ''):
                 return True
-            # Handle abbreviations
             if book.startswith(book_lower) and len(book_lower) >= 3:
                 return True
         
@@ -204,11 +213,9 @@ class PlannerAgent:
         """Check if message is a common Bible topic"""
         message_clean = message.strip().lower()
         
-        # Direct match
         if message_clean in self.bible_topics:
             return True
         
-        # Check if any topic is in the message
         for topic in self.bible_topics:
             if topic in message_clean and len(message_clean) < 50:
                 return True
@@ -217,13 +224,10 @@ class PlannerAgent:
     
     def _looks_like_search(self, message):
         """Determine if a message looks like a search query"""
-        # Short messages (1-5 words) that aren't greetings are likely searches
         words = message.split()
         
         if len(words) <= 5 and len(words) >= 1:
-            # Not a greeting
             if not any(g in message for g in self.intents['greeting']):
-                # Not a command
                 if message not in ['done', 'finished', 'completed', 'yes', 'no', 'ok', 'okay']:
                     return True
         
@@ -233,7 +237,6 @@ class PlannerAgent:
         """Extract the topic/keyword from search messages"""
         message_lower = message.lower().strip()
         
-        # Patterns to extract topic from
         patterns = [
             r'what does the bible say about\s+(.+)',
             r'bible says about\s+(.+)',
@@ -253,11 +256,9 @@ class PlannerAgent:
             match = re.search(pattern, message_lower)
             if match:
                 topic = match.group(1).strip()
-                # Clean up common trailing words
                 topic = re.sub(r'\s+(please|thanks|thank you|in the bible)$', '', topic)
                 return topic
         
-        # Fallback: remove common trigger words and return the rest
         triggers = ['find', 'search', 'show me', 'look for', 'look up', 'verses about', 
                    'verse about', 'what does the bible say about', 'scripture about']
         
@@ -266,8 +267,6 @@ class PlannerAgent:
             result = result.replace(trigger, '')
         
         result = result.strip()
-        
-        # Clean up leftover prepositions
         result = re.sub(r'^(about|for|on)\s+', '', result)
         result = re.sub(r'\s+(about|for|on)$', '', result)
         
@@ -338,6 +337,29 @@ class PlannerAgent:
                     'agent': 'response_composer',
                     'action': 'confirm_bookmark',
                     'data': intent['data']
+                }
+            ]
+        
+        elif intent['type'] == 'bookmark_all':
+            plan['actions'] = [
+                {
+                    'agent': 'memory',
+                    'action': 'save_multiple_bookmarks',
+                    'data': intent['data']
+                },
+                {
+                    'agent': 'response_composer',
+                    'action': 'confirm_multiple_bookmarks',
+                    'data': intent['data']
+                }
+            ]
+        
+        elif intent['type'] == 'bookmark_no':
+            plan['actions'] = [
+                {
+                    'agent': 'response_composer',
+                    'action': 'acknowledge_no_bookmark',
+                    'data': {}
                 }
             ]
         

@@ -17,8 +17,11 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
-CORS(app)
+app.secret_key = os.getenv('SECRET_KEY')
+
+if not app.secret_key:
+    raise ValueError("No SECRET_KEY set for Flask application")
+CORS(app, resources={r"/api/*": {"origins": "https://bible-agent-bot.onrender.com"}})
 
 # Initialize database and agents
 db = Database()
@@ -308,4 +311,5 @@ if __name__ == '__main__':
     
     # Run Flask app
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    is_dev = os.getenv('FLASK_ENV') == 'development'
+    app.run(debug=is_dev, host='0.0.0.0', port=port)

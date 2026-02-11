@@ -87,7 +87,7 @@ class ResponseComposer:
     
     def comfort_response(self, verses, emotions, message=None):
         """
-        Create comforting response with relevant verses
+        Create comforting response with relevant verses and clickable bookmark buttons
         verses: list of verse data from Bible Matching Agent
         emotions: list of detected emotions
         """
@@ -138,8 +138,22 @@ class ResponseComposer:
         ]
         
         message_text += f"\n{random.choice(closings)}\n\n"
-        message_text += "💬 Want to talk more? I'm here to listen.\n"
-        message_text += "🔖 Save any of these verses by saying **'Save [verse reference]'**"
+        
+        # Add clickable bookmark buttons
+        message_text += "---\n\n"
+        message_text += "💾 **Would you like to bookmark any of these verses?**\n\n"
+        message_text += '<div class="bookmark-buttons">'
+        
+        # Create button for each verse
+        for i, verse in enumerate(verses, 1):
+            verse_ref = verse['reference']
+            message_text += f'<button class="bookmark-btn" data-action="bookmark" data-reference="{verse_ref}">📖 {verse_ref}</button>'
+        
+        # Add "Bookmark All" and "No Thanks" buttons
+        all_refs = '|'.join([v['reference'] for v in verses])
+        message_text += f'<button class="bookmark-btn bookmark-all" data-action="bookmark-all" data-references="{all_refs}">💾 Bookmark All</button>'
+        message_text += '<button class="bookmark-btn bookmark-no">✖️ No Thanks</button>'
+        message_text += '</div>'
         
         return message_text
     
@@ -189,18 +203,30 @@ class ResponseComposer:
         return message
     
     def present_search_results(self, verses, topic):
-        """Format search results"""
+        """Format search results with clickable bookmark buttons"""
         if not verses:
             return f"I couldn't find verses about '{topic}'. Try rephrasing or ask for help with a specific challenge."
         
         message = f"🔍 **Verses about: {topic}**\n\n"
         
         for verse in verses[:5]:
-            message += f"**{verse.get('reference', 'Unknown')}**\n"
-            message += f"{verse.get('text', '')}\n\n"
+            ref = verse.get('reference', 'Unknown')
+            message += f"**{ref}**\n"
+            message += f"_{verse.get('text', '')}_\n\n"
             message += "---\n\n"
         
-        message += "💡 Want to save any of these? Say **'Save [verse reference]'**"
+        # Add clickable bookmark buttons
+        message += "💾 **Would you like to bookmark any of these verses?**\n\n"
+        message += '<div class="bookmark-buttons">'
+        
+        for i, verse in enumerate(verses[:5], 1):
+            verse_ref = verse.get('reference', 'Unknown')
+            message += f'<button class="bookmark-btn" data-action="bookmark" data-reference="{verse_ref}">📖 {verse_ref}</button>'
+        
+        all_refs = '|'.join([verse.get('reference', 'Unknown') for verse in verses[:5]])
+        message += f'<button class="bookmark-btn bookmark-all" data-action="bookmark-all" data-references="{all_refs}">💾 Bookmark All</button>'
+        message += '<button class="bookmark-btn bookmark-no">✖️ No Thanks</button>'
+        message += '</div>'
         
         return message
     
@@ -237,9 +263,9 @@ class ResponseComposer:
             message += f"\n_...and {len(bookmarks) - 10} more_"
         
         return message
-
+    
     def present_verse(self, verse_data):
-        """Present a specific verse or chapter to the user"""
+        """Present a specific verse or chapter to the user with bookmark button"""
         if not verse_data:
             return "I couldn't find that verse. Please check the reference and try again (e.g., 'John 3:16' or 'Psalm 23')."
         
@@ -248,6 +274,44 @@ class ResponseComposer:
         is_chapter = verse_data.get('is_chapter', False)
         
         if is_chapter:
-            return f"📖 **{reference}**\n\n{text}\n\n_Would you like me to continue to the next chapter?_"
+            message = f"📖 **{reference}**\n\n"
+            message += f"{text}\n\n"
         else:
-            return f"📖 **{reference}**\n\n\"{text}\"\n\n_Would you like to bookmark this verse or explore related passages?_"
+            message = f"📖 **{reference}**\n\n"
+            message += f"\"{text}\"\n\n"
+        
+        # Add bookmark button
+        message += "---\n\n"
+        message += '<div class="bookmark-buttons">'
+        message += f'<button class="bookmark-btn" data-action="bookmark" data-reference="{reference}">📖 Bookmark {reference}</button>'
+        message += '<button class="bookmark-btn bookmark-no">✖️ No Thanks</button>'
+        message += '</div>'
+        
+        return message
+    
+    def acknowledge_no_bookmark(self):
+        """Acknowledge user chose not to bookmark"""
+        responses = [
+            "👍 No problem! Let me know if you'd like to explore more Scripture.",
+            "✨ Sounds good! I'm here whenever you need encouragement or guidance.",
+            "💙 That's okay! Feel free to ask for verses anytime you need them.",
+        ]
+        
+        return random.choice(responses)
+    
+    def confirm_multiple_bookmarks(self, data):
+        """Confirm multiple bookmarks were saved"""
+        refs = data.get('references', [])
+        count = len(refs)
+        
+        message = f"✅ **{count} Bookmarks Saved!**\n\n"
+        message += "📚 Verses saved:\n"
+        for ref in refs[:5]:  # Show first 5
+            message += f"• {ref}\n"
+        
+        if count > 5:
+            message += f"• ...and {count - 5} more\n"
+        
+        message += "\n💡 View all your bookmarks anytime by clicking **🔖 Bookmarks**"
+        
+        return message

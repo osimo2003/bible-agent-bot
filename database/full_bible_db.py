@@ -3,10 +3,7 @@ import re
 from pathlib import Path
 
 class FullBibleDatabase:
-    """
-    Interface to complete Bible SQLite database
-    Provides full-text search across Old and New Testament
-    """
+    """Interface to complete Bible SQLite database"""
     
     def __init__(self, db_path='database/bible.db'):
         self.db_path = Path(__file__).parent / 'bible.db'
@@ -26,31 +23,24 @@ class FullBibleDatabase:
             self.conn = None
     
     def load_books(self):
-        """Load book names into cache for fast lookup"""
+        """Load book names into cache"""
         if not self.conn:
             return
-        
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT book_id, book_name, testament FROM books")
             books = cursor.fetchall()
-            
             for book in books:
                 self.book_cache[book['book_id']] = {
                     'name': book['book_name'],
                     'testament': book['testament']
                 }
-            
             print(f"✅ Loaded {len(self.book_cache)} books")
         except Exception as e:
             print(f"❌ Error loading books: {e}")
     
-    def search_text(self, query, max_results=10):
-        """
-        Search for any word or phrase in the Bible
-        Handles special formatting like {are}, {is}, etc.
-        Returns list of matching verses
-        """
+    def search_text(self, query, max_results=10, testament=None):
+        """Search for any word or phrase in the Bible"""
         if not self.conn:
             return []
         
@@ -58,83 +48,67 @@ class FullBibleDatabase:
             cursor = self.conn.cursor()
             query_lower = query.lower().strip()
             
-            # Strategy 1: Try exact phrase first (with flexible braces)
-            # Convert "blessed are the meek" to "blessed%are%the%meek" pattern
+            # Build testament filter
+            testament_filter = ""
+            if testament:
+                book_ids = [bid for bid, info in self.book_cache.items() 
+                           if info['testament'] == testament]
+                if book_ids:
+                    testament_filter = f" AND v.book_id IN ({','.join(map(str, book_ids))})"
+            
+            # Strategy 1: Flexible phrase search
             words = query_lower.split()
             if len(words) > 1:
-                # Create pattern that allows {word} formatting
                 flexible_pattern = '%'.join(words)
-                
-                sql = """
+                sql = f"""
                     SELECT v.id, v.book_id, v.chapter, v.verse, v.text
                     FROM verses v
-                    WHERE LOWER(v.text) LIKE ? 
-                    ORDER BY v.id 
-                    LIMIT ?
+                    WHERE LOWER(v.text) LIKE ? {testament_filter}
+                    ORDER BY v.id LIMIT ?
                 """
-                
                 cursor.execute(sql, (f'%{flexible_pattern}%', max_results))
                 results = cursor.fetchall()
-                
                 if results:
                     return self._format_results(results)
             
-            # Strategy 2: Try direct search
-            sql = """
+            # Strategy 2: Direct search
+            sql = f"""
                 SELECT v.id, v.book_id, v.chapter, v.verse, v.text
                 FROM verses v
-                WHERE LOWER(v.text) LIKE ? 
-                ORDER BY v.id 
-                LIMIT ?
+                WHERE LOWER(v.text) LIKE ? {testament_filter}
+                ORDER BY v.id LIMIT ?
             """
-            
             cursor.execute(sql, (f'%{query_lower}%', max_results))
             results = cursor.fetchall()
-            
             if results:
                 return self._format_results(results)
             
-            # Strategy 3: Search for text without braces content
-            # Remove {word} patterns from search
-            clean_query = re.sub(r'\{[^}]*\}', '', query_lower).strip()
-            if clean_query != query_lower:
-                cursor.execute(sql, (f'%{clean_query}%', max_results))
-                results = cursor.fetchall()
-                
-                if results:
-                    return self._format_results(results)
-            
-            # Strategy 4: Multi-word search - find verses containing ALL words
+            # Strategy 3: Multi-word AND search
             if len(words) > 1:
-                # Build query for all words
                 conditions = ' AND '.join([f"LOWER(v.text) LIKE '%{word}%'" for word in words])
                 sql = f"""
                     SELECT v.id, v.book_id, v.chapter, v.verse, v.text
                     FROM verses v
-                    WHERE {conditions}
-                    ORDER BY v.id 
-                    LIMIT ?
+                    WHERE {conditions} {testament_filter}
+                    ORDER BY v.id LIMIT ?
                 """
-                
                 cursor.execute(sql, (max_results,))
                 results = cursor.fetchall()
-                
                 if results:
                     return self._format_results(results)
             
             return []
-            
         except Exception as e:
             print(f"Search error: {e}")
             return []
     
     def _format_results(self, results):
-        """Format database results into verse dictionaries"""
+        """Format database results"""
         verses = []
         for row in results:
-            book_name = self.book_cache.get(row['book_id'], {}).get('name', 'Unknown')
-            
-            # Clean up text - remove {} but keep the word inside
+            book_info = self.book_cache.get(row['book_id'], {})
+            book_name = book_info.get('name', 'Unknown')
+            testament = book_info.get('testament', 'Unknown')
             text = re.sub(r'\{([^}]*)\}', r'\1', row['text'])
             
             verses.append({
@@ -142,95 +116,43 @@ class FullBibleDatabase:
                 'chapter': row['chapter'],
                 'verse': row['verse'],
                 'text': text,
-                'reference': f"{book_name} {row['chapter']}:{row['verse']}"
+                'reference': f"{book_name} {row['chapter']}:{row['verse']}",
+                'testament': testament
             })
-        
         return verses
-    
-    def search_book(self, book_name, query=None, max_results=10):
-        """Search within a specific book"""
-        if not self.conn:
-            return []
-        
-        try:
-            # Find book_id by name
-            book_id = None
-            for bid, book_info in self.book_cache.items():
-                if book_name.lower() in book_info['name'].lower():
-                    book_id = bid
-                    break
-            
-            if not book_id:
-                return []
-            
-            cursor = self.conn.cursor()
-            
-            if query:
-                sql = """
-                    SELECT v.id, v.book_id, v.chapter, v.verse, v.text
-                    FROM verses v
-                    WHERE v.book_id = ? AND LOWER(v.text) LIKE ?
-                    ORDER BY v.chapter, v.verse
-                    LIMIT ?
-                """
-                cursor.execute(sql, (book_id, f'%{query.lower()}%', max_results))
-            else:
-                sql = """
-                    SELECT v.id, v.book_id, v.chapter, v.verse, v.text
-                    FROM verses v
-                    WHERE v.book_id = ?
-                    ORDER BY v.chapter, v.verse
-                    LIMIT ?
-                """
-                cursor.execute(sql, (book_id, max_results))
-            
-            results = cursor.fetchall()
-            return self._format_results(results)
-            
-        except Exception as e:
-            print(f"Book search error: {e}")
-            return []
     
     def get_verse(self, book, chapter, verse):
         """Get a specific verse"""
         if not self.conn:
             return None
-        
         try:
-            # Find book_id
             book_id = None
             for bid, book_info in self.book_cache.items():
                 if book.lower() in book_info['name'].lower():
                     book_id = bid
                     break
-            
             if not book_id:
                 return None
             
             cursor = self.conn.cursor()
-            sql = """
+            cursor.execute("""
                 SELECT v.id, v.book_id, v.chapter, v.verse, v.text
-                FROM verses v
-                WHERE v.book_id = ? AND v.chapter = ? AND v.verse = ?
-            """
-            
-            cursor.execute(sql, (book_id, chapter, verse))
+                FROM verses v WHERE v.book_id = ? AND v.chapter = ? AND v.verse = ?
+            """, (book_id, chapter, verse))
             row = cursor.fetchone()
             
             if row:
-                book_name = self.book_cache.get(row['book_id'], {}).get('name', book)
+                book_info = self.book_cache.get(row['book_id'], {})
                 text = re.sub(r'\{([^}]*)\}', r'\1', row['text'])
-                
                 return {
-                    'book': book_name,
+                    'book': book_info.get('name', book),
                     'chapter': row['chapter'],
                     'verse': row['verse'],
                     'text': text,
-                    'reference': f"{book_name} {row['chapter']}:{row['verse']}"
+                    'reference': f"{book_info.get('name', book)} {row['chapter']}:{row['verse']}",
+                    'testament': book_info.get('testament', 'Unknown')
                 }
-            
             return None
-            
         except Exception as e:
             print(f"Get verse error: {e}")
             return None
@@ -239,31 +161,22 @@ class FullBibleDatabase:
         """Get all verses from a chapter"""
         if not self.conn:
             return []
-        
         try:
-            # Find book_id
             book_id = None
             for bid, book_info in self.book_cache.items():
                 if book.lower() in book_info['name'].lower():
                     book_id = bid
                     break
-            
             if not book_id:
                 return []
             
             cursor = self.conn.cursor()
-            sql = """
+            cursor.execute("""
                 SELECT v.id, v.book_id, v.chapter, v.verse, v.text
-                FROM verses v
-                WHERE v.book_id = ? AND v.chapter = ?
+                FROM verses v WHERE v.book_id = ? AND v.chapter = ?
                 ORDER BY v.verse
-            """
-            
-            cursor.execute(sql, (book_id, chapter))
-            results = cursor.fetchall()
-            
-            return self._format_results(results)
-            
+            """, (book_id, chapter))
+            return self._format_results(cursor.fetchall())
         except Exception as e:
             print(f"Get chapter error: {e}")
             return []
@@ -272,19 +185,11 @@ class FullBibleDatabase:
         """Get database statistics"""
         if not self.conn:
             return None
-        
         try:
             cursor = self.conn.cursor()
-            
             cursor.execute("SELECT COUNT(*) as total FROM verses")
             total = cursor.fetchone()['total']
-            
-            return {
-                'total_verses': total,
-                'total_books': len(self.book_cache),
-                'status': 'connected'
-            }
-            
+            return {'total_verses': total, 'total_books': len(self.book_cache), 'status': 'connected'}
         except Exception as e:
             print(f"Stats error: {e}")
             return None

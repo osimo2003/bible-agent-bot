@@ -43,6 +43,32 @@ class BibleAgentChat {
             }
         });
         
+        // NEW: Bookmark button handlers
+        document.addEventListener('click', (e) => {
+            // Handle individual bookmark button
+            if (e.target.classList.contains('bookmark-btn') && 
+                e.target.dataset.action === 'bookmark' && 
+                e.target.dataset.reference) {
+                const reference = e.target.dataset.reference;
+                this.messageInput.value = `Save ${reference}`;
+                this.sendMessage();
+            }
+            
+            // Handle bookmark all button
+            if (e.target.classList.contains('bookmark-all') && 
+                e.target.dataset.references) {
+                const references = e.target.dataset.references;
+                this.messageInput.value = `Save all: ${references}`;
+                this.sendMessage();
+            }
+            
+            // Handle no thanks button
+            if (e.target.classList.contains('bookmark-no')) {
+                this.messageInput.value = 'No thanks';
+                this.sendMessage();
+            }
+        });
+        
         // Modal close buttons
         document.querySelectorAll('.close').forEach(closeBtn => {
             closeBtn.addEventListener('click', () => {
@@ -279,7 +305,7 @@ class BibleAgentChat {
                 content.innerHTML = `
                     <div style="padding: 2rem; text-align: center;">
                         <p>📖 You haven't saved any bookmarks yet.</p>
-                        <p style="margin-top: 1rem; color: var(--text-secondary);">Say "Save [verse reference]" to bookmark your favorite verses!</p>
+                        <p style="margin-top: 1rem; color: var(--text-secondary);">Click bookmark buttons when verses are shown!</p>
                     </div>
                 `;
             }
